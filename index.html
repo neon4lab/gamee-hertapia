@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hortopia: Moon Crystal Farm</title>
+    <style>
+        :root {
+            --bg-color: #ffe6f2;
+            --primary: #ff69b4;
+            --primary-dark: #d1428c;
+            --primary-light: #ffb6c1;
+            --secondary: #4169e1;
+            --accent: #ffd700;
+            --text: #4b0082;
+            --soil: #e6a8d7;
+            --soil-wet: #9370db;
+            --soil-tilled: #dda0dd;
+            --grass: #81d8d0;
+            --white: #ffffff;
+            --grid-size: 45px;
+            --gold-border: 3px solid var(--accent);
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        
+        body {
+            margin: 0; padding: 0;
+            font-family: "Comic Sans MS", cursive, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* --- HUD & HEADER --- */
+        #hud {
+            display: flex; flex-direction: column; 
+            padding: 5px 15px;
+            background: linear-gradient(to bottom, #ffb6c1, #fff0f5);
+            border-bottom: var(--gold-border);
+            z-index: 100;
+        }
+        .hud-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+
+        .stat-badge {
+            background: var(--white);
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.8rem;
+            border: 2px solid var(--secondary);
+            display: flex; align-items: center; gap: 4px;
+        }
+
+        /* --- SIDE PANEL --- */
+        #side-panel {
+            position: fixed;
+            top: 0; left: -280px;
+            width: 280px; height: 100%;
+            background: white;
+            z-index: 1000;
+            transition: 0.3s;
+            box-shadow: 5px 0 15px rgba(0,0,0,0.2);
+            padding: 20px;
+            overflow-y: auto;
+        }
+        #side-panel.open { left: 0; }
+        .btn-menu { width: 100%; padding: 10px; margin: 5px 0; background: var(--primary); color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
+
+        /* --- GAME LAYOUT --- */
+        #game-container { flex: 1; display: flex; position: relative; overflow: hidden; }
+        #viewport { flex: 1; background: #81d8d0; overflow: auto; display: flex; justify-content: center; align-items: center; padding-right: 80px; }
+        #grid-map { display: grid; gap: 1px; background: var(--accent); border: 4px solid var(--accent); position: relative; }
+
+        /* --- THE PLAYER (WATAK PUTERI) --- */
+        #player { width: var(--grid-size); height: var(--grid-size); position: absolute; z-index: 10; pointer-events: none; transition: transform 0.15s ease-out; display: flex; justify-content: center; align-items: center; }
+        .player-visual { width: 35px; height: 35px; background: var(--primary); border: 3px solid white; border-radius: 50%; display: flex; justify-content: center; align-items: center; box-shadow: 0 0 15px var(--accent); }
+        .player-visual::after { content: '👸'; font-size: 24px; }
+
+        /* --- TILES --- */
+        .tile { width: var(--grid-size); height: var(--grid-size); background-color: var(--grass); display: flex; justify-content: center; align-items: center; }
+        .tile.soil { background-color: var(--soil); }
+        .tile.tilled { background-color: var(--soil-tilled); border: 1px dashed white; }
+        .tile.watered { background-color: var(--soil-wet); box-shadow: inset 0 0 10px var(--secondary); }
+
+        /* --- ACTION BAR (RIGHT) --- */
+        #action-bar {
+            position: fixed;
+            right: 0; top: 50%;
+            transform: translateY(-50%);
+            display: flex; flex-direction: column; gap: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px 10px;
+            border-left: var(--gold-border);
+            border-radius: 20px 0 0 20px;
+            z-index: 150;
+        }
+        .tool-btn {
+            width: 55px; height: 55px;
+            background: white; border: 3px solid var(--primary-light);
+            border-radius: 50%; display: flex; justify-content: center; align-items: center;
+            font-size: 24px; cursor: pointer; position: relative;
+        }
+        .tool-btn.active { border-color: var(--accent); background: var(--primary-light); transform: scale(1.1); }
+        .tool-count { position: absolute; bottom: -2px; right: -2px; background: var(--accent); font-size: 10px; padding: 2px 5px; border-radius: 10px; }
+
+        /* --- D-PAD --- */
+        #d-pad { position: fixed; bottom: 20px; left: 20px; display: grid; grid-template-columns: repeat(3, 55px); grid-template-rows: repeat(2, 55px); gap: 5px; z-index: 200; }
+        .control-btn { width: 55px; height: 55px; background: rgba(255, 105, 180, 0.85); border: 2px solid white; border-radius: 10px; display: flex; justify-content: center; align-items: center; color: white; font-size: 22px; cursor: pointer; }
+
+        #toast-container { position: fixed; top: 100px; left: 50%; transform: translateX(-50%); z-index: 2000; pointer-events: none; }
+        .toast { background: white; border: 2px solid var(--primary); padding: 10px 20px; border-radius: 20px; margin-bottom: 5px; font-weight: bold; animation: fadeUp 2s forwards; }
+        @keyframes fadeUp { 0% { opacity: 0; transform: translateY(20px); } 10% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; } }
+    </style>
+</head>
+<body>
+
+    <div id="side-panel">
+        <button class="btn-menu" style="background:#ff4d4d;" onclick="toggleMenu()">Tutup Menu ✖</button>
+        <div class="panel-section">
+            <h3>🏪 Kedai Magik</h3>
+            <button class="btn-menu" onclick="game.buySeed()">Beli Benih Lobak ($10)</button>
+            <button class="btn-menu" onclick="game.sellAll()">Jual Semua Hasil (💰)</button>
+        </div>
+    </div>
+
+    <div id="hud">
+        <div class="hud-row">
+            <button onclick="toggleMenu()" style="background:var(--primary); color:white; border:none; padding:8px 12px; border-radius:10px; font-weight:bold;">☰ MENU</button>
+            <div style="display:flex; gap:5px;">
+                <div class="stat-badge">💰 <span id="ui-money">0</span></div>
+                <div class="stat-badge">⚡ <span id="ui-energy">100</span></div>
+            </div>
+        </div>
+        <div class="hud-row">
+            <div style="display:flex; gap:5px;">
+                <div class="stat-badge">📅 Hari <span id="ui-day">1</span></div>
+                <div class="stat-badge">🥕 Hasil: <span id="ui-crops">0</span></div>
+            </div>
+            <button style="padding:5px 15px; border-radius:15px; background:var(--secondary); color:white; border:none; font-weight:bold;" onclick="game.sleep()">💤 TIDUR / REHAT</button>
+        </div>
+    </div>
+
+    <div id="game-container">
+        <div id="viewport">
+            <div id="grid-map">
+                <div id="player"><div class="player-visual"></div></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="d-pad">
+        <div style="grid-column: 2;"><div class="control-btn" onclick="game.movePlayer(0,-1)">▲</div></div>
+        <div style="grid-row: 2;"><div class="control-btn" onclick="game.movePlayer(-1,0)">◀</div></div>
+        <div style="grid-row: 2;"><div class="control-btn" onclick="game.movePlayer(0,1)">▼</div></div>
+        <div style="grid-row: 2;"><div class="control-btn" onclick="game.movePlayer(1,0)">▶</div></div>
+    </div>
+
+    <div id="action-bar"></div>
+    <div id="toast-container"></div>
+
+    <script>
+        const CONFIG = { gridW: 10, gridH: 10, tileSize: 45 };
+
+        // --- SISTEM BUNYI DINAMIK ---
+        const Sound = {
+            ctx: null,
+            init() {
+                if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            },
+            play(freq, type = 'sine', duration = 0.2, volume = 0.1, slide = 0) {
+                this.init();
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                if (slide !== 0) osc.frequency.exponentialRampToValueAtTime(freq + slide, this.ctx.currentTime + duration);
+                gain.gain.setValueAtTime(volume, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+                osc.connect(gain); gain.connect(this.ctx.destination);
+                osc.start(); osc.stop(this.ctx.currentTime + duration);
+            },
+            ting() { this.play(880, 'sine', 0.3, 0.1, 400); },    
+            pop() { this.play(440, 'sine', 0.1, 0.05, 200); },   
+            dig() { this.play(150, 'triangle', 0.15, 0.1, -50); }, 
+            click() { this.play(600, 'square', 0.05, 0.02); },   
+            swoosh() { this.play(300, 'sine', 0.3, 0.05, -200); },
+            sleep() { this.play(220, 'sine', 0.5, 0.1, 100); }    
+        };
+
+        const game = {
+            state: { money: 50, energy: 100, day: 1, inventory: { 'seed': 5, 'crop': 0 }, selectedTool: 'hand', player: { x: 2, y: 2 }, map: [] },
+            init() {
+                for (let i = 0; i < CONFIG.gridW * CONFIG.gridH; i++) 
+                    this.state.map.push({ x: i % CONFIG.gridW, y: Math.floor(i / CONFIG.gridW), tilled: false, watered: false, crop: null });
+                this.renderGrid(); this.renderTools(); this.updateUI();
+            },
+            movePlayer(dx, dy) {
+                const nx = this.state.player.x + dx, ny = this.state.player.y + dy;
+                if (nx >= 0 && nx < CONFIG.gridW && ny >= 0 && ny < CONFIG.gridH) {
+                    Sound.click();
+                    this.state.player.x = nx; this.state.player.y = ny;
+                    document.getElementById('player').style.transform = `translate(${nx * CONFIG.tileSize}px, ${ny * CONFIG.tileSize}px)`;
+                }
+            },
+            interact(x, y) {
+                const dist = Math.abs(x - this.state.player.x) + Math.abs(y - this.state.player.y);
+                if (dist > 1) return this.toast("Terlalu jauh!");
+                const tile = this.state.map[y * CONFIG.gridW + x];
+                const tool = this.state.selectedTool;
+
+                if (tool === 'hoe' && !tile.tilled) { 
+                    if(this.state.energy < 5) return this.toast("Tenaga habis!");
+                    tile.tilled = true; this.state.energy -= 5; Sound.dig();
+                }
+                else if (tool === 'seed' && tile.tilled && !tile.crop && this.state.inventory.seed > 0) { 
+                    tile.crop = { stage: 1 }; this.state.inventory.seed--; Sound.ting();
+                }
+                else if (tool === 'water' && tile.tilled) { 
+                    tile.watered = true; Sound.dig();
+                }
+                else if (tool === 'hand' && tile.crop && tile.crop.stage >= 3) { 
+                    tile.crop = null; tile.tilled = false; tile.watered = false;
+                    this.state.inventory.crop++; Sound.ting(); this.toast("🥕 Berjaya tuai!"); 
+                }
+                
+                this.renderTile(x, y); this.updateUI(); this.renderTools();
+            },
+            buySeed() { 
+                if(this.state.money >= 10) { 
+                    this.state.money -= 10; this.state.inventory.seed++; Sound.ting();
+                    this.updateUI(); this.renderTools(); this.toast("Beli 1 Benih!"); 
+                } else { this.toast("Duit tak cukup!"); } 
+            },
+            sellAll() { 
+                if(this.state.inventory.crop > 0) { 
+                    const untung = this.state.inventory.crop * 25; this.state.money += untung; this.state.inventory.crop = 0; 
+                    Sound.ting(); this.updateUI(); this.toast(`Jual hasil! +$${untung}`); 
+                } else { this.toast("Tiada hasil."); } 
+            },
+            sleep() {
+                Sound.sleep();
+                this.state.day++; this.state.energy = 100;
+                this.state.map.forEach(t => { if(t.crop && t.watered && t.crop.stage < 3) t.crop.stage++; t.watered = false; });
+                this.renderGrid(); this.updateUI(); this.toast("Hari " + this.state.day);
+            },
+            renderGrid() {
+                const grid = document.getElementById('grid-map');
+                grid.style.gridTemplateColumns = `repeat(${CONFIG.gridW}, ${CONFIG.tileSize}px)`;
+                const p = document.getElementById('player'); grid.innerHTML = ''; grid.appendChild(p);
+                this.state.map.forEach(t => {
+                    const d = document.createElement('div'); d.id = `t-${t.x}-${t.y}`;
+                    d.className = `tile ${t.tilled?'tilled':''} ${t.watered?'watered':''}`;
+                    d.onclick = () => this.interact(t.x, t.y);
+                    if(t.crop) d.innerHTML = t.crop.stage >= 3 ? '🥕' : '🌱';
+                    grid.appendChild(d);
+                });
+                this.movePlayer(0,0);
+            },
+            renderTile(x, y) {
+                const t = this.state.map[y * CONFIG.gridW + x], el = document.getElementById(`t-${x}-${y}`);
+                el.className = `tile ${t.tilled?'tilled':''} ${t.watered?'watered':''}`;
+                el.innerHTML = t.crop ? (t.crop.stage >= 3 ? '🥕' : '🌱') : '';
+            },
+            renderTools() {
+                const bar = document.getElementById('action-bar'); bar.innerHTML = '';
+                const tools = [{k:'hand', i:'🖐️'}, {k:'hoe', i:'⛏️'}, {k:'water', i:'🚿'}, {k:'seed', i:'🌰', c:this.state.inventory.seed}];
+                tools.forEach(t => {
+                    const b = document.createElement('div'); b.className = `tool-btn ${this.state.selectedTool===t.k?'active':''}`;
+                    b.innerHTML = t.i + (t.c !== undefined ? `<span class="tool-count">${t.c}</span>` : '');
+                    b.onclick = () => { Sound.pop(); this.state.selectedTool = t.k; this.renderTools(); };
+                    bar.appendChild(b);
+                });
+            },
+            updateUI() {
+                document.getElementById('ui-money').innerText = this.state.money;
+                document.getElementById('ui-energy').innerText = this.state.energy;
+                document.getElementById('ui-day').innerText = this.state.day;
+                document.getElementById('ui-crops').innerText = this.state.inventory.crop;
+            },
+            toast(m) {
+                const c = document.getElementById('toast-container'), t = document.createElement('div');
+                t.className = 'toast'; t.innerText = m; c.appendChild(t); setTimeout(() => t.remove(), 2000);
+            }
+        };
+
+        function toggleMenu() { 
+            Sound.swoosh();
+            document.getElementById('side-panel').classList.toggle('open'); 
+        }
+
+        window.onload = () => game.init();
+    </script>
+</body>
+</html>
